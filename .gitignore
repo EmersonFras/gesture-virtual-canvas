@@ -27,6 +27,9 @@ Thumbs.db
 *.swp
 *.swo
 
+# QA output
+qa_output/
+
 # Data / video
 *.mp4
 *.avi
