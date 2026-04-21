@@ -32,7 +32,7 @@ def draw(canvas,x,y,prevx,prevy,color):
     return canvas
 
 def find_brush(x,y,q_model,bg):
-    for i in range(25):
+    for i in range(1):
 
 
         #basic MST
@@ -85,7 +85,7 @@ def main():
     canvas = None
 
     #this is the brush color, change this to (0,0,0) to erase
-    color = (255,0,0)
+    color = (255,100,100)
     while True:
         
         ret, frame = cap.read()
