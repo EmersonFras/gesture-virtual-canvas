@@ -38,7 +38,7 @@ def draw(canvas, x, y, prevx, prevy, color):
     return canvas
 
 def find_brush(x, y, q_model, bg):
-    for _ in range(25):
+    for _ in range(1):
         bgFeatures = circularNeighbors(bg, x, y, 15)
         p_test = colorHistogram(bgFeatures, 16, x, y, 15)
         weights = meanShiftWeights(bgFeatures, q_model, p_test, 16)
