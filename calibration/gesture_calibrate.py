@@ -45,9 +45,11 @@ def main() -> None:
         ok, frame = cap.read()
         if not ok:
             break
-        frame = cv2.flip(frame, 1)
-        result = recognizer.update(frame)
+        half_w = frame.shape[1] // 2
+        gesture_frame = frame[:, :half_w]
+        result = recognizer.update(gesture_frame)
         vis = annotate_gesture(frame, result)
+        cv2.line(vis, (half_w, 0), (half_w, vis.shape[0]), (100, 100, 100), 1)
 
         y = 110
         instructions = [
@@ -67,11 +69,11 @@ def main() -> None:
             samples.clear()
             recognizer.reset()
         if key in (ord('p'), ord('o'), ord('f')):
-            mask = recognizer._skin_mask(frame)
+            mask = recognizer._skin_mask(gesture_frame)
             contour = recognizer._largest_contour(mask)
             if contour is not None and cv2.contourArea(contour) >= recognizer.min_contour_area:
                 label = {ord('p'): 'point', ord('o'): 'open_palm', ord('f'): 'fist'}[key]
-                samples[label].append(recognizer.contour_to_hu(contour, frame.shape[:2]))
+                samples[label].append(recognizer.contour_to_hu(contour, gesture_frame.shape[:2]))
         if key == ord('s'):
             averaged = {label: np.mean(np.vstack(vals), axis=0) for label, vals in samples.items() if vals}
             if averaged:
