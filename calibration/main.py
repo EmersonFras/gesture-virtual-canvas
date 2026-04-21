@@ -15,6 +15,7 @@ import cv2, numpy as np
 sys.path.insert(0, '.')
 from meanshift import circularNeighbors, colorHistogram, meanShiftWeights
 from detector import detect_canvas
+from homography import apply_homography
 
 MAX_DIM = 1280
 QA_DIR = 'qa_output'
@@ -84,6 +85,11 @@ def main():
     prevy = 0
     canvas = None
 
+    canvas_result = None
+    detect_counter = 0
+    DETECT_INTERVAL = 20
+    canvas_just_reset = False
+
     #this is the brush color, change this to (0,0,0) to erase
     color = (255,0,0)
     while True:
@@ -93,7 +99,32 @@ def main():
             break
         frame = fit(frame)
         vis = frame.copy()
-        
+
+        # refresh workspace detection every DETECT_INTERVAL frames, but stop once drawing starts
+        detect_counter += 1
+        if calibrated == 0 and detect_counter >= DETECT_INTERVAL:
+            detect_counter = 0
+            result = detect_canvas(frame)
+            if result is not None:
+                prev_w = canvas_result["canvas_w"] if canvas_result else None
+                prev_h = canvas_result["canvas_h"] if canvas_result else None
+                canvas_result = result
+                # only allocate a new canvas on first detection or if paper dimensions changed
+                if prev_w != canvas_result["canvas_w"] or prev_h != canvas_result["canvas_h"]:
+                    canvas = np.zeros(
+                        (canvas_result["canvas_h"], canvas_result["canvas_w"], 3),
+                        dtype=np.uint8,
+                    )
+                    canvas_just_reset = True
+
+        # draw detected paper corners on the live view
+        if canvas_result is not None:
+            corner_labels = ['TL', 'TR', 'BR', 'BL']
+            for label, pt in zip(corner_labels, canvas_result["corners_img"]):
+                cx_pt, cy_pt = int(pt[0]), int(pt[1])
+                cv2.circle(vis, (cx_pt, cy_pt), 8, COLORS[label], -1)
+                cv2.putText(vis, label, (cx_pt + 10, cy_pt), cv2.FONT_HERSHEY_SIMPLEX, 0.5, COLORS[label], 2)
+
         #canvas just stores drawing, should be 0 where empty
         if canvas is None:
             canvas = np.zeros_like(frame)
@@ -104,18 +135,37 @@ def main():
 
         if calibrated == 1:
 
-            #Updates brush position
+            #Updates brush position in image space
             brushx,brushy = find_brush(brushx,brushy,brushHist,frame)
-        
-            #updates the canvas with the newest point
-            canvas = draw(canvas,brushx,brushy,prevx,prevy,color)
+
+            # map to canvas space if workspace is detected, else draw in image space
+            if canvas_result is not None:
+                draw_x, draw_y = apply_homography(canvas_result["H"], (brushx, brushy))
+                prev_draw_x, prev_draw_y = apply_homography(canvas_result["H"], (prevx, prevy))
+            else:
+                draw_x, draw_y = brushx, brushy
+                prev_draw_x, prev_draw_y = prevx, prevy
+
+            #updates the canvas with the newest point (skip first frame after reset to avoid streak from origin)
+            if not canvas_just_reset:
+                canvas = draw(canvas, draw_x, draw_y, prev_draw_x, prev_draw_y, color)
+            canvas_just_reset = False
 
             #stores previous coordinates so a line could be drawn between them
             prevx,prevy = brushx,brushy
 
-            #add canvas to visual frame
-            canvas_drawing = np.where(canvas>0)
-            vis[canvas_drawing] = canvas[canvas_drawing]
+            #project canvas back onto the image via H_inv for display
+            if canvas_result is not None:
+                warped = cv2.warpPerspective(
+                    canvas,
+                    canvas_result["H_inv"],
+                    (vis.shape[1], vis.shape[0]),
+                )
+                mask = warped.any(axis=2)
+                vis[mask] = warped[mask]
+            else:
+                canvas_drawing = np.where(canvas>0)
+                vis[canvas_drawing] = canvas[canvas_drawing]
             
             
 

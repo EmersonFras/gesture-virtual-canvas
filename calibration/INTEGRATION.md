@@ -34,8 +34,10 @@ img_xy    = apply_homography(result["H_inv"], (canvas_x, canvas_y))
 
 ## Performance
 
-Cache the result of `detect_canvas` and refresh every 15–30 frames rather than
-calling it on every frame.
+`detect_canvas` runs every 20 frames during the pre-calibration phase only. Once
+the user calibrates the brush (presses `c`), detection stops and the last known
+homography is held for the session. This avoids false re-detections caused by the
+user's hand or arm occluding paper edges while drawing.
 
 ## QA Tool
 
