@@ -26,20 +26,24 @@ def fit(frame):
     s = min(MAX_DIM / max(h, w), 1.0)
     return cv2.resize(frame, (int(w*s), int(h*s)), interpolation=cv2.INTER_AREA) if s < 1 else frame
 
-def draw(canvas,x,y,color):
-    cv2.circle(canvas,(int(x),int(y)),15,color,cv2.FILLED)
+def draw(canvas,x,y,prevx,prevy,color):
+    cv2.line(canvas, (int(prevx),int(prevy)), (int(x),int(y)),color,thickness = 10)
 
     return canvas
 
 def find_brush(x,y,q_model,bg):
     for i in range(25):
 
-        bgFeatures = circularNeighbors(bg, x, y, 30)
-        p_test = colorHistogram(bgFeatures,16,x,y,35)
+
+        #basic MST
+        bgFeatures = circularNeighbors(bg, x, y, 15)
+        p_test = colorHistogram(bgFeatures,16,x,y,15)
         weights = meanShiftWeights(bgFeatures,q_model,p_test,16)
         weights = weights.flatten()
         new_x = np.sum(bgFeatures[:,0] * weights) / (np.sum(weights) + 0.0001)
         new_y = np.sum(bgFeatures[:,1] * weights) / (np.sum(weights) + 0.0001)
+
+        #doesnt update if brush isnt found. If it isnt found, it defaults to 0, so if it is more than 0 it updates the brush position
         if new_x + new_y > 1:
             x = new_x
             y = new_y
@@ -70,11 +74,18 @@ def main():
 
     cap = cv2.VideoCapture(args.video if args.video else args.camera)
     save_idx = 0
+
+
+    #variable declaration
     calibrated = 0
     brushx = 0
     brushy = 0
+    prevx = 0
+    prevy = 0
     canvas = None
-    color = (255,100,100)
+
+    #this is the brush color, change this to (0,0,0) to erase
+    color = (255,0,0)
     while True:
         
         ret, frame = cap.read()
@@ -83,16 +94,26 @@ def main():
         frame = fit(frame)
         vis = frame.copy()
         
+        #canvas just stores drawing, should be 0 where empty
         if canvas is None:
             canvas = np.zeros_like(frame)
 
+        #if we havent calibrated the brush, draw the target circle.
         if calibrated == 0:
             cv2.circle(vis, (350,250),30,(0,0,255),5)
 
         if calibrated == 1:
+
+            #Updates brush position
             brushx,brushy = find_brush(brushx,brushy,brushHist,frame)
-            #print('x',brushx,'y',brushy)
-            canvas = draw(canvas,brushx,brushy,color)
+        
+            #updates the canvas with the newest point
+            canvas = draw(canvas,brushx,brushy,prevx,prevy,color)
+
+            #stores previous coordinates so a line could be drawn between them
+            prevx,prevy = brushx,brushy
+
+            #add canvas to visual frame
             canvas_drawing = np.where(canvas>0)
             vis[canvas_drawing] = canvas[canvas_drawing]
             
@@ -107,12 +128,19 @@ def main():
             cv2.imwrite(f'{QA_DIR}/qa_{save_idx}.png', vis)
             save_idx += 1
 
+        #this is to calibrate, to calibrate, hold the tip of the brush so it fills the red circle and press c.
         if key == ord('c') and calibrated == 0:
             calibrated = 1
-            brushFeatures = circularNeighbors(frame,350,250,30)
-            brushHist = colorHistogram(brushFeatures,16,350,250,30)
+
+            #creates q_model out of the area in frame
+            brushFeatures = circularNeighbors(frame,350,250,15)
+            brushHist = colorHistogram(brushFeatures,16,350,250,15)
+
+            #creates initial brush conditions
             brushx = 350
+            prevx = 350
             brushy = 250
+            prevy = 250
         
         
 
